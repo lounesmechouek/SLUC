@@ -10,18 +10,65 @@ library(shiny)
 library(dplyr)
 
 # Fonctions
+# Renvoie le pourcentage d'outliers dans un jeu de données (ou un vecteur) df
 percentageOutliers <- function(df){
-  res = 0
-  lgt = 0
-  for (n in colnames(df)) {
-    if(class(df[,n]) == "integer" | class(df[,n]) == "numeric"){
-      res = res + length(which(df[,n] >  mean(df[,n]) + 3 * sd(df[,n]) | x < mean(df[,n]) - 3 * sd(df[,n])))
-      lgt = lgt+length(df[,n])
+  res <- 0
+  lgt <- 0
+  if(!is.null(colnames(df))){
+    for (n in colnames(df)) {
+      if(class(df[,n]) == "integer" | class(df[,n]) == "numeric"){
+        res <- res + length(which(df[,n] >  mean(df[,n]) + 3 * sd(df[,n]) | x < mean(df[,n]) - 3 * sd(df[,n])))
+        lgt <- lgt+length(df[,n])
+      }
+    }
+    return(format(round((res/lgt)*100, 2), nsmall = 2))
+  } else{
+    if(class(df) == "integer" | class(df) == "numeric"){
+      return(length(which(df >  mean(df) + 3 * sd(df) | x < mean(df) - 3 * sd(df))) / length(df))
+    } else {
+      return(NULL)
     }
   }
-  return(format(round((res/lgt)*100, 2), nsmall = 2))
 }
 
+# Renvoie le pourcentage de valeurs manquantes dans un jeu de données (ou un vecteur) df
+percentageNA <- function(df){
+  res <- 0
+  if(!is.null(colnames(df))){
+    for (n in colnames(df)) {
+      res <- res+sum(is.na(df[,n]))
+    }
+    res <- format(round((res/(dim(df)[2]*dim(df)[1]))*100, 2), nsmall = 2)
+  } else{
+      res <- format(round((sum(is.na(df))/length(df))*100,2), nsmall = 2)
+  }
+  return(res)
+}
+
+# Renvoie True si la variable représentée par le vecteur x est qualitative
+isQualitative <- function(x){
+  if(class(x) == "factor" | class(x) == "character" | class(x) == "logical") #(length(unique(x))<=n & class(x)=="integer")
+    return(TRUE)
+  else 
+    return(FALSE)
+}
+
+# Renvoie True si la variable est constante 
+isConstant <- function(v){
+  return(length(unique(v)) == 1)
+}
+
+# Renvoie le nombre de classes de la variable x
+nbClass <- function(x){
+  if(isQualitative(x)){
+    return(length(unique(x))) 
+  } else{
+    return(NULL)
+  }
+}
+
+
+# Partie Graphique
 ui <- dashboardPage(
   dashboardHeader(title = "ASCD"),
   dashboardSidebar(
@@ -92,7 +139,7 @@ ui <- dashboardPage(
           column(width = 4,
              box(title = "Type de variables", width = NULL, solidHeader = TRUE, status = "primary",
                  box(title = "Quantitatives", width = NULL, infoBoxOutput("statVarQuan")),
-                 box(title = "Catégorielles", width = NULL, infoBoxOutput("statVarQual")),
+                 box(title = "Qualitatives", width = NULL, infoBoxOutput("statVarQual")),
                  align="center"
           )),
           
@@ -102,6 +149,12 @@ ui <- dashboardPage(
                  box(title = "Outliers", width = NULL,  infoBoxOutput("statOutliers")),
                  align="center"
           ))
+        ),
+        
+        fluidRow(
+          column(title = "Récapitulatif", width = 12,
+            box(width = NULL, height=400, class="unique", DT::dataTableOutput("table_recapitulatif"))
+          )
         )
               
       ),
@@ -158,7 +211,6 @@ server <- function(input, output) {
     data()
   })
   
-  
   # Statistiques générales
   output$statDimVar <- renderInfoBox({
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
@@ -180,13 +232,12 @@ server <- function(input, output) {
     )
   })
   
-  
   output$statVarQuan <- renderInfoBox({
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     df <- cleanData()
     res <- 0
     for (n in colnames(df)) {
-      if(class(df[,n]) == "integer" | class(df[,n]) == "numeric"){
+      if(!isQualitative(df[,n])){
         res<-res+1
       }
     }
@@ -201,7 +252,7 @@ server <- function(input, output) {
     df <- cleanData()
     res <- 0
     for (n in colnames(df)) {
-      if(class(df[,n]) == "factor" | class(df[,n]) == "character"){
+      if(isQualitative(df[,n])){
         res<-res+1
       }
     }
@@ -214,29 +265,86 @@ server <- function(input, output) {
   output$statNA <- renderInfoBox({
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     df <- cleanData()
-    res <- 0
-    for (n in colnames(df)) {
-      res <- res+sum(is.na(df[,n]))
-    }
-    res = format(round((res/(dim(df)[2]*dim(df)[1]))*100, 2), nsmall = 2)
+    res <- percentageNA(df)
     infoBox("Missing Values", paste0(res,"%"),  
         color = "light-blue",
         icon = icon("times-circle")
     )
   })
     
-    
   output$statOutliers <- renderInfoBox({
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     df <- cleanData()
-    infoBox("Outliers", paste0(percentageOutliers(df),"%"),  
-        color = "light-blue",
-        icon = icon("chain")
-    )
+    po <- percentageOutliers(df)
+    if(!is.null(po)){
+      infoBox("Outliers", paste0(po,"%"),  
+          color = "light-blue",
+          icon = icon("chain")
+      )
+    }
   })
   
   # Récapitulatif des métriques par variable
-  
+  output$table_recapitulatif <- DT::renderDT({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    df <- cleanData()
+    
+    varNames <- c(colnames(df))
+    rawNames <- c("Type",  "Moy", "Med", "Nb Class", "Cst?", "% NA", "% Out")
+    
+    resDf <- data.frame(matrix(0, nrow=length(rawNames), ncol=length(varNames)), row.names=rawNames)
+    
+    # On calcule les statistiques relatives à chaque variable
+    i <- 1
+    type <- "-"
+    med <- "-"
+    moy <- "-"
+    nbclass <- "-"
+    cst <- "-"
+    perna <- "-"
+    perout <- "-"
+    
+    for(vn in varNames){
+      # type de la variable
+      if(!isQualitative(df[,vn])) 
+        type <- "Qtt"
+      else 
+        type <- "Cat"
+      
+      # moyenne
+      if(!isQualitative(df[,vn])){
+        moy <- mean(df[,vn])
+      } else 
+        moy <- "-"
+      
+      # mediane
+      if(!isQualitative(df[,vn])){
+        med <- median(df[,vn])
+      } else
+        med <- "-"
+      
+      # nombre de classes
+      nbclass <- nbClass(df[,vn])
+      if(is.null(nbclass)) nbclass <- "-"
+       
+      # variable constante ?
+      cst <- isConstant(df[,vn])
+      if(is.null(cst)) cst <- "-"
+      
+      # pourcentage de NA
+      perna <- percentageNA(df[,vn])
+      
+      # pourcentage d'outliers
+      perout <- percentageOutliers(df[,vn])
+      if(is.null(cst)) perout <- "-"
+      
+      resDf[,i] <- c(type, moy, med, nbclass, cst, perna, perout)
+    
+      i <- i+1
+    }
+    colnames(resDf) <- varNames  
+    DT::datatable(resDf) %>%  DT::formatStyle(0:nrow(resDf))
+  })
   
   # Analyse Univariée
   
