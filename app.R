@@ -3,11 +3,20 @@
 # authors: "Lounes Mechouek", "Mohammed Nassim Sehdi"
 # date: "October 15, 2022"
 #
-
+options(encoding = "UTF-8")
 # Packages
+if (!require(shinydashboard)) install.packages('shinydashboard')
+if (!require(shiny)) install.packages('shiny')
+if (!require(dplyr)) install.packages('dplyr')
+if (!require(ggplot2)) install.packages('ggplot2')
+if (!require(DT)) install.packages('DT')
+
 library(shinydashboard)
 library(shiny)
 library(dplyr)
+library(ggplot2)
+library(DT)
+
 
 # Fonctions
 # Renvoie le pourcentage d'outliers dans un jeu de données (ou un vecteur) df
@@ -17,14 +26,14 @@ percentageOutliers <- function(df){
   if(!is.null(colnames(df))){
     for (n in colnames(df)) {
       if(class(df[,n]) == "integer" | class(df[,n]) == "numeric"){
-        res <- res + length(which(df[,n] >  mean(df[,n]) + 3 * sd(df[,n]) | x < mean(df[,n]) - 3 * sd(df[,n])))
+        res <- res + length(which(df[,n] >  mean(df[,n], na.rm=TRUE) + 3 * sd(df[,n], na.rm=TRUE) | df[,n] < mean(df[,n], na.rm=TRUE) - 3 * sd(df[,n], na.rm=TRUE)))
         lgt <- lgt+length(df[,n])
       }
     }
     return(format(round((res/lgt)*100, 2), nsmall = 2))
   } else{
     if(class(df) == "integer" | class(df) == "numeric"){
-      return(length(which(df >  mean(df) + 3 * sd(df) | x < mean(df) - 3 * sd(df))) / length(df))
+      return(length(which(df >  mean(df, na.rm=TRUE) + 3 * sd(df, na.rm=TRUE) | df < mean(df, na.rm=TRUE) - 3 * sd(df, na.rm=TRUE))) / length(df))
     } else {
       return(NULL)
     }
@@ -67,6 +76,23 @@ nbClass <- function(x){
   }
 }
 
+# Renvoie un dataframe avec la fréquence de chaque modalité de la variable y
+getFrequences <- function(y){
+  df <- as.data.frame(table(y))
+  res <- data.frame(
+    classe = c(as.factor(df[,1])),
+    frequence = c(df[,2])
+  )
+  return(res)
+}
+
+# Renvoie un dataframe avec la fréquence de chaque couple (x,y) où x est une variable et y l'outcome
+getFrequenceByVar <- function(df, x, y){
+  res = df %>% count(df[,x], df[,y], sort = TRUE)
+  colnames(res) = c("modalite", "classe", "frequence")
+  return(res)
+}
+
 
 # Partie Graphique
 ui <- dashboardPage(
@@ -83,7 +109,7 @@ ui <- dashboardPage(
   ),
   dashboardBody(
     # On définit des styles css pour centrer les éléments dans les box
-    tags$style(HTML('
+    tags$style(HTML('Z
             .col-sm-12 div.box{
               display: flex;
               align-items: center;
@@ -100,9 +126,9 @@ ui <- dashboardPage(
               margin-bottom: 2%;
             }
             .dataTables_wrapper{
-              position:absolute;
-              margin:0;
-              top: 10px;
+              
+              overflow-x : scroll
+              overflow-y : scroll;
             }
     ')),
     
@@ -152,8 +178,29 @@ ui <- dashboardPage(
         ),
         
         fluidRow(
-          column(title = "Récapitulatif", width = 12,
-            box(width = NULL, height=400, class="unique", DT::dataTableOutput("table_recapitulatif"))
+          div(h2("Récapitulatif"), style="margin-left:2%;"),
+          column(width = 12,
+            box(height=450, width = NULL, class="unique", DT::dataTableOutput("table_recapitulatif"))
+          )
+        ),
+        
+        div(h2("Exploration des données"), style="margin-left:1%; margin-bottom:3%;"),
+        
+        fluidRow(
+          column(title = "Proportions des classes", width = 6,
+            selectInput("outcomeVariable", label="Veuillez sélectionner l'outcome", choices=c("-")),
+            box(width = NULL, plotOutput("repartitionClasses"))
+          ),
+          column(title = "Proportions des classes selon une variable", width = 6,
+             fluidRow(
+              column(width = 6,
+                selectInput("repartitionParVar", label="Répartition du churn selon une variable", choices=c("-"))
+              ),
+              column(width = 6,
+                selectInput("nbIntervalles", label="Nombre d'intervalles pour la variable", choices=c("-")),
+              ),
+             ),
+             box(width = NULL, plotOutput("repartitionClassVar"))
           )
         )
               
@@ -193,16 +240,64 @@ server <- function(input, output) {
     if (is.null(input$uploaded_data)) {
       return()
     } else {
-      read.table(input$uploaded_data$datapath, header = TRUE, sep = ",")
+      return(read.table(input$uploaded_data$datapath, header = TRUE, sep = ","))
       #read.csv(input$uploaded_data$datapath, header = TRUE, sep = ",")
     }
   })
   
+  observeEvent(data(), {
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    df <- cleanData()
+    nms <- colnames(cleanData())
+    
+    #tdisplay_proxy <- DT::dataTableProxy("table_display")
+    #DT::replaceData(tdisplay_proxy, df, resetPaging = FALSE)
+    
+    choix <- c("-")
+    updateSelectInput(inputId = "outcomeVariable", choices = c(choix, nms))
+  })
+  
+  observeEvent(outcomeVar(), {
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    df <- cleanData()
+    nms <- colnames(cleanData())
+    ov <- outcomeVar()
+    choix <- c("-")
+    
+    if (is.null(ov) | ov == "-") {
+      updateSelectInput(inputId = "repartitionParVar", choices = choix)
+    } else {
+      updateSelectInput(inputId = "repartitionParVar", choices = c(choix, nms[nms!=ov]))
+    }
+    
+  })
+  
+  observeEvent(classPerVar(), {
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    df <- cleanData()
+    nms <- colnames(cleanData())
+    choix <- c("-")
+    cpv <- classPerVar()
+    
+    if (is.null(cpv) | cpv == "-") {
+      updateSelectInput(inputId = "nbIntervalles", choices = choix)
+    } else{
+      if(isQualitative(df[, cpv])){
+        updateSelectInput(inputId = "nbIntervalles", choices = choix)
+      } else {
+        updateSelectInput(inputId = "nbIntervalles", choices = c(choix, c(2:15)))
+      }
+      
+    }
+    
+  })
+  
+  
   # Section "Chargement"
   # Affichage du tableau de données 
-  output$table_display <- DT::renderDT({
+  output$table_display <- DT::renderDataTable({
     validate(need(!is.null(data()) , "Veuillez sélectionner un dataset valide"))
-    DT::datatable(data()) %>%  DT::formatStyle(0:nrow(data()))
+    DT::datatable(data())
   })
   
   # Section "Exploration"
@@ -309,17 +404,17 @@ server <- function(input, output) {
       if(!isQualitative(df[,vn])) 
         type <- "Qtt"
       else 
-        type <- "Cat"
+        type <- "Qual"
       
       # moyenne
       if(!isQualitative(df[,vn])){
-        moy <- mean(df[,vn])
+        moy <- mean(df[,vn], na.rm=TRUE)
       } else 
         moy <- "-"
       
       # mediane
       if(!isQualitative(df[,vn])){
-        med <- median(df[,vn])
+        med <- median(df[,vn], na.rm=TRUE)
       } else
         med <- "-"
       
@@ -333,10 +428,11 @@ server <- function(input, output) {
       
       # pourcentage de NA
       perna <- percentageNA(df[,vn])
+      if(is.null(perna)) perna <- "-"
       
       # pourcentage d'outliers
       perout <- percentageOutliers(df[,vn])
-      if(is.null(cst)) perout <- "-"
+      if(is.null(perout)) perout <- "-"
       
       resDf[,i] <- c(type, moy, med, nbclass, cst, perna, perout)
     
@@ -347,8 +443,69 @@ server <- function(input, output) {
   })
   
   # Analyse Univariée
+  # L'utilisateur sélectionne l'outcome
+  outcomeVar <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    df <- cleanData()
+    nms <- colnames(cleanData())
+    choix <- c("-")
+    
+    # On vérifie que la variable n'est pas null
+    if (is.null(input$outcomeVariable) | input$outcomeVariable == "-") {
+      updateSelectInput(inputId = "repartitionParVar", choices = choix)
+      return("-")
+    } else {
+      updateSelectInput(inputId = "repartitionParVar", choices = c(choix, nms[nms!=input$outcomeVariable]))
+      return(input$outcomeVariable)
+    }
+  })
   
+  output$repartitionClasses <- renderPlot({
+    if(outcomeVar() == "-"){validate(need(!is.null(NULL) , "Sélectionnez d'abord la variable de sortie"))}
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    
+    df <- cleanData()
+    ov <- outcomeVar()
+    
+    res <- getFrequences(df[, ov])
+    
+    ggplot(res, aes(x="", y=frequence, fill=classe))+geom_bar(width = .75, stat = "identity")+coord_polar("y", start=0)
+  })
   
+  classPerVar <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    df <- cleanData()
+    nms <- colnames(cleanData())
+    choix <- c("-")
+    
+    # On vérifie que la variable n'est pas null
+    if (is.null(input$repartitionParVar) | input$repartitionParVar == "-") {
+      updateSelectInput(inputId = "nbIntervalles", choices = choix)
+      return("-")
+    } else {
+      if(!isQualitative(df[, input$repartitionParVar])){
+        updateSelectInput(inputId = "nbIntervalles", choices = c(choix, c(2:15)))
+      }
+      return(input$repartitionParVar)
+    }
+  })
+  
+  output$repartitionClassVar <- renderPlot({
+    if(classPerVar() == "-"){validate(need(!is.null(NULL) , "Sélectionnez une variable à étudier"))}
+    if(outcomeVar() == "-"){validate(need(!is.null(NULL) , "Sélectionnez d'abord la variable de sortie"))}
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    
+    df <- cleanData()
+    cpv <- classPerVar()
+    ov <- outcomeVar()
+    
+    if(isQualitative(df[,cpv])){
+      res = getFrequenceByVar(df, cpv, ov)
+      ggplot(res, aes(x=modalite, y=frequence, fill=classe))+geom_bar(width = .5, stat = "identity")
+    } 
+    # G�rer variable continue
+    
+  })
   
   # Analyse Multivariée
   
