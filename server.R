@@ -4,6 +4,11 @@ options(encoding = "UTF-8")
 library(dplyr)
 library(ggplot2)
 library(DT)
+library(corrplot)
+library(DescTools)
+library(FactoMineR)
+library("factoextra")
+library(imputeTS)
 
 
 ################################################
@@ -71,7 +76,7 @@ nbClass <- function(x){
 getFrequences <- function(y){
   df <- as.data.frame(table(y))
   res <- data.frame(
-    classe = c(as.factor(df[,1])),
+    classe = c(factor(df[,1])),
     frequence = c(df[,2])
   )
   return(res)
@@ -81,6 +86,16 @@ getFrequences <- function(y){
 getFrequenceByVar <- function(df, x, y){
   res = df %>% count(df[,x], df[,y], sort = TRUE)
   colnames(res) = c("modalite", "classe", "frequence")
+  return(res)
+}
+
+# Renvoie le nom des variables qualitatives de df
+# Pour avoir le nom des variables quantitatives : 1/ nms <- colnames(df) 2/ nms[!(nms %in% getQualitatives(df))]
+getQualitatives <- function(df){
+  res <- c()
+  for(col in colnames(df)){
+    if(isQualitative(df[,col])) res <- c(res, col)
+  }
   return(res)
 }
 
@@ -114,10 +129,19 @@ server <- function(input, output) {
     
     choix <- c("-")
     updateSelectInput(inputId = "outcomeVariable", choices = c(choix, nms))
+    updateSelectInput(inputId = "boxRepart", choices = c(choix, nms))
+    updateSelectInput(inputId = "corrContVar", choices = c(nms[!(nms %in% getQualitatives(df))]))
+    updateSelectInput(inputId = "corrMixVar", choices = c(nms))
+    updateSelectInput(inputId = "pcaVars", choices = c(nms[!(nms %in% getQualitatives(df))]))
+    updateSelectInput(inputId = "cp1", choices = c(1:length(nms)))
+    updateSelectInput(inputId = "excludedVars", choices = c(nms))
+  })
+  
+  observeEvent(cleanData(), {
   })
   
   observeEvent(outcomeVar(), {
-    validate(need(!is.null(cleanData()) , "Veuillez sÃ©lectionner un dataset valide"))
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     df <- cleanData()
     nms <- colnames(cleanData())
     ov <- outcomeVar()
@@ -127,6 +151,7 @@ server <- function(input, output) {
       updateSelectInput(inputId = "repartitionParVar", choices = choix)
     } else {
       updateSelectInput(inputId = "repartitionParVar", choices = c(choix, nms[nms!=ov]))
+      updateSelectInput(inputId = "boxRepart", choices = c(choix, nms[nms!=ov]))
     }
     
   })
@@ -148,7 +173,6 @@ server <- function(input, output) {
       }
       
     }
-    
   })
   
   
@@ -156,13 +180,31 @@ server <- function(input, output) {
   # Affichage du tableau de donnÃ©es 
   output$table_display <- DT::renderDataTable({
     validate(need(!is.null(data()) , "Veuillez sélectionner un dataset valide"))
-    DT::datatable(data())
+    DT::datatable(data(), options = list(scrollX = TRUE))
   })
   
   # Section "Exploration"
   cleanData <- reactive({
-    # On prÃ©-traite les donnÃ©es selon les critÃ¨res de l'utilisateur
-    data()
+    df <- data()
+
+    if(naPolicy() == "Supprimer les individus"){
+      df1 <- na.omit(df)
+    }
+    else if(naPolicy() == "Remplacer par la moyenne de la colonne"){
+      df1 <- na_mean(df)
+    }else{
+      df1 <- df
+    }
+    
+    if(!(is.null(exdVars()))){
+      df2 <- df1[,!( names(df1) %in% c(exdVars()) )]
+    } else {
+      df2 <- df1
+    }
+    
+    print(percentageNA(df))
+    print(percentageNA(df2))
+    return(df2)
   })
   
   # Statistiques gÃ©nÃ©rales
@@ -298,7 +340,7 @@ server <- function(input, output) {
       i <- i+1
     }
     colnames(resDf) <- varNames  
-    DT::datatable(resDf) %>%  DT::formatStyle(0:nrow(resDf))
+    DT::datatable(resDf, options = list(scrollX = TRUE)) %>%  DT::formatStyle(0:nrow(resDf))
   })
   
   # Analyse Univariée
@@ -327,6 +369,7 @@ server <- function(input, output) {
     ov <- outcomeVar()
     
     res <- getFrequences(df[, ov])
+    res$classe <- factor(res$classe)
     
     ggplot(res, aes(x="", y=frequence, fill=classe))+geom_bar(width = .75, stat = "identity")+coord_polar("y", start=0)
   })
@@ -360,15 +403,243 @@ server <- function(input, output) {
     
     if(isQualitative(df[,cpv])){
       res = getFrequenceByVar(df, cpv, ov)
+      res$classe = factor(res$classe)
       ggplot(res, aes(x=modalite, y=frequence, fill=classe))+geom_bar(width = .5, stat = "identity")
-    } 
+    } else {
+      validate(need(!is.null(nombreInterv()) & nombreInterv()!='-' , "Veuillez sélectionner un nombre d'intervalles à construire"))
+      interv <- cut(df[,cpv],  as.numeric(nombreInterv()))
+      df1 <- data.frame(df, interv)
+      res <- getFrequenceByVar(df1, "interv", ov)
+      res$classe = factor(res$classe)
+      ggplot(res, aes(x=modalite, y=frequence, fill=classe))+geom_bar(width = .5, stat = "identity")
+    }
+  })
+  
+  nombreInterv <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    return(input$nbIntervalles)
+  })
+  
+  varBoxRepart <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+
+    # On vérifie que la variable n'est pas null
+    if (is.null(input$boxRepart) | input$boxRepart == "-") {
+      return("-")
+    } else {
+      return(input$boxRepart)
+    }
+  })
+  
+  output$boxPlotRepart <- renderPlot({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) & outcomeVar()!='-' , "Veuillez d'abord sélectionner une variable de sortie"))
+    validate(need(!is.null(varBoxRepart()) & varBoxRepart()!='-' , "Veuillez sélectionner une variable à afficher"))
+    
+    df <- cleanData()
+    
+    validate(need(!isQualitative(df[,varBoxRepart()]) , "Veuillez sélectionner une variable QUANTITATIVE"))
+    
+    varBox <- varBoxRepart()
+    ov <- outcomeVar()
+    
+    df1 <- data.frame(df[,varBox], factor(df[,ov]))
+    colnames(df1) <- c("Variable", "Classes")
+
+    ggplot(df1, aes(x=Variable, y=Classes)) + geom_boxplot()+ coord_flip() #outlier.colour="red", outlier.shape=8, outlier.size=4
     
   })
   
-  # Analyse Multivariée
+  corrContinue <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    
+    return(input$corrContVar)
+  })
+  
+  output$corrContPlotVar <- renderPlot({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(corrContinue()) & corrContinue()!='-' & length(corrContinue()>1), "Veuillez sélectionner au moins deux variables à étudier"))
+    
+    df <- cleanData()
+    
+    df1 <- cor(na.omit(df[c(corrContinue())]))
+    
+    corrplot(df1, addgrid.col = "darkgray", type = "upper", method = "color", addCoef.col = "gray")
+  })
+  
+  corrMixte <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    
+    return(input$corrMixVar)
+  })
+  
+  output$corrMixPlotVar <- renderPlot({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(corrMixte()) & corrMixte()!='-' & length(corrMixte())>1 , "Veuillez sélectionner au moins deux variables à étudier"))
+    
+    df <- na.omit(cleanData())
+    tabMixt <- corrMixte()
+    res <- matrix(nrow = length(tabMixt), ncol = length(tabMixt))
+    
+    for(i in 1:length(tabMixt)){
+      var1 <- tabMixt[i]
+      coefs <- c()
+      for(j in 1:length(tabMixt)){
+        var2 <- tabMixt[j]
+        names <- c(var1, var2)
+        if(j<i){
+          coefs <- c(coefs, res[i, j])
+        } else if(j==i){
+          coefs <- c(coefs, 1)
+        } else{
+          if(isQualitative(df[, var1]) & isQualitative(df[, var2])){
+            coefs <- c(coefs, DescTools::PairApply(df[names], DescTools::CramerV))
+          } else if(isQualitative(df[, var1]) & !isQualitative(df[, var2])){
+            aov1 <- aov(df[, var2] ~ df[, var1])
+            coefs <- c(coefs, unlist(summary(aov1))["Pr(>F)1"])
+          } else if(isQualitative(df[, var2]) & !isQualitative(df[, var1])){
+            aov1 <- aov(df[, var1] ~ df[, var2])
+            coefs <- c(coefs, unlist(summary(aov1))["Pr(>F)1"])
+          } else{
+            coefs <- c(coefs, NA)
+          }
+        }
+      }
+      res[, i] <- coefs
+    }
+    df1 <- as.data.frame(res)
+    colnames(res) <- c(tabMixt)
+    rownames(res) <- c(tabMixt) 
+ 
+    corrplot(res, addgrid.col = "darkgray", type = "upper", method = "color", addCoef.col = "gray")
+  })
+  
   
   # Visualisation par réduction de dimensionnalitié
+  varACP <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    return(input$pcaVars)
+  }) 
+  
+  varSuppACP <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    return(input$pcaSupp)
+  })
+  
+  observeEvent(varACP(), {
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    va <- varACP()
+    print(va)
+    choix <- c("-")
+    
+    if (is.null(va)) {
+      updateSelectInput(inputId = "pcaSupp", choices = choix)
+    } else {
+      updateSelectInput(inputId = "pcaSupp", choices = c(va))
+    }
+  })
+  
+  pcaRes <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    df <- na.omit(cleanData())
+    nms <- c(colnames(df))
+    nms <- nms[!(nms %in% getQualitatives(df))]
+    
+    df1 <- df[, c(names(df) %in% nms)]
+
+    if(is.null(varACP())){
+      return(PCA(df1, graph=F))
+    } else if( !is.null(varACP()) &  is.null(varSuppACP()) ){
+      return(PCA(df1[,!(names(df1) %in% c(varACP()))], graph=F))
+    } else if(!is.null(varACP()) &  !is.null(varSuppACP()) ){
+      indx <- c()
+      for(name in varSuppACP()){
+        indx <- c(indx, grep(name, colnames(df1)))
+      }
+      return(PCA(df1[,!(names(df1) %in% c(varACP()))], graph=F, quanti.sup=indx))
+    }
+  })
+  
+  
+  numCP1 <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    
+    return(input$cp1)
+  })
+  
+  numCP2 <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    
+    return(input$cp2)
+  })
+  
+  observeEvent(numCP1(), {
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    num <- c(1:length(colnames(cleanData())))
+  
+    if(is.null(numCP1())){
+      updateSelectInput(inputId = "cp2", choices =  )
+    } else {
+      selection <- strtoi(numCP1())
+      num <- num[num!=selection]
+      updateSelectInput(inputId = "cp2", choices =  num)
+    }
+  })
+  
+  output$pcaVarPlot <- renderPlot({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(pcaRes()) , "Une erreur a eu lieu lors de l'ACP"))
+    
+    if(is.null(numCP1()) | is.null(numCP2())){
+      fviz_pca_var(pcaRes(), axes = c(1,2)) + labs(title ="Cercle de corrélation", x = paste0("PC", 1), y = paste0("PC", 2))
+    } else {
+      fviz_pca_var(pcaRes(), axes = c(strtoi(numCP1()), strtoi(numCP2()))) + labs(title ="Cercle de corrélation", x = paste0("PC", strtoi(numCP1())), y = paste0("PC",  strtoi(numCP2())))
+    }
+  }) 
+  
+  output$pcaIndPlot <- renderPlot({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(pcaRes()) , "Une erreur a eu lieu lors de l'ACP"))
+    
+    if(is.null(numCP1()) | is.null(numCP2())){
+      fviz_pca_ind(pcaRes(), axes = c(1,2)) + labs(title ="Répartition des individus", x = paste0("PC", 1), y = paste0("PC", 2))
+    } else {
+      fviz_pca_ind(pcaRes(), axes = c(strtoi(numCP1()), strtoi(numCP2()))) + labs(title ="Répartition des individus", x = paste0("PC", strtoi(numCP1())), y = paste0("PC",  strtoi(numCP2())))
+    }
+  })
+  
+  
+  output$tableACP <- DT::renderDT({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(pcaRes()) , "Une erreur a eu lieu lors de l'ACP"))
+    df <- cleanData()
+    acp <- pcaRes()
+    nbDim <- length(colnames(acp$var$contrib))
+        
+    
+    nameContib <- c()
+    nameSqrCos <- c()
+    for(i in 1:nbDim){
+      nameContib <- c(nameContib, paste0("contrib",i))
+      nameSqrCos <- c(nameSqrCos, paste0("sqrCos",i))
+    }
+    
+    colnames(acp$var$contrib) <- nameContib
+    colnames(acp$var$cos2) <- nameSqrCos
+    
+    data <- data.frame(acp$var$contrib, acp$var$cos2)
+    
+    DT::datatable(data, options = list(scrollX = TRUE))
+  })
   
   # Prétraitements
+  exdVars <- reactive({
+    validate(need(!is.null(data()) , "Veuillez sélectionner un dataset valide"))
+    return(input$excludedVars)
+  })
   
+  naPolicy <- reactive({
+    validate(need(!is.null(data()) , "Veuillez sélectionner un dataset valide"))
+    return(input$naHandling)
+  })
 }

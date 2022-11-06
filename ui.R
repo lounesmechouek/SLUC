@@ -9,12 +9,12 @@ ui <- dashboardPage(
   dashboardHeader(title = "ASCD"),
   dashboardSidebar(
     sidebarMenu(
-      menuItem("Chargement", tabName = "chargement", icon = icon("fa-light fa-file-import", verify_fa = FALSE)),
-      menuItem("Exploration", tabName = "exploration", icon = icon("fa-solid fa-chart-line", verify_fa = FALSE)),
-      menuItem("Decision Tree", tabName = "decision-tree", icon = icon("fa-light fa-network-wired", verify_fa = FALSE)),
-      menuItem("Logistic Regression", tabName = "logistic-regression", icon = icon("fa-light fa-gears", verify_fa = FALSE)),
-      menuItem("SVM", tabName = "svm", icon = icon("project-diagram", verify_fa = FALSE)),
-      menuItem("Sampling", tabName = "sampling", icon = icon("fa-light fa-vials", verify_fa = FALSE))
+      menuItem("Chargement", tabName = "chargement", icon = icon("arrow-right-to-file", verify_fa = FALSE)),
+      menuItem("Exploration", tabName = "exploration", icon = icon("pie-chart", verify_fa = FALSE)),
+      menuItem("Decision Tree", tabName = "decision-tree", icon = icon("project-diagram", verify_fa = FALSE)),
+      menuItem("Logistic Regression", tabName = "logistic-regression", icon = icon("cogs", verify_fa = FALSE)),
+      menuItem("SVM", tabName = "svm", icon = icon("line-chart", verify_fa = FALSE)),
+      menuItem("Sampling", tabName = "sampling", icon = icon("gauge-simple-med", verify_fa = FALSE))
     )
   ),
   dashboardBody(
@@ -35,8 +35,7 @@ ui <- dashboardPage(
             .shiny-input-container > .control-label{
               margin-bottom: 2%;
             }
-            .dataTables_wrapper{
-              
+            .datatables {
               overflow-x : scroll
               overflow-y : scroll;
             }
@@ -57,7 +56,7 @@ ui <- dashboardPage(
               fluidRow(
                 box(
                   DT::dataTableOutput("table_display"),
-                  height = 500, width = 12, class="unique"
+                  height = 550, width = 12, class="unique"
                 )
               )
       ),
@@ -94,6 +93,13 @@ ui <- dashboardPage(
                 )
               ),
               
+              div(h2("Pré-traitements"), style="margin-left:1%; margin-bottom:3%;"),
+              fluidRow(
+                column(title = "Variables à exclure de l'étude", width = 6, selectInput("excludedVars", label="Variables à exclure de l'étude", choices=c(), multiple=TRUE)),
+                
+                column(title = "Gestion des valeurs manquantes", width = 6, selectInput("naHandling", label="Gestion des valeurs manquantes", choices=c("Ignorer", "Supprimer les individus", "Remplacer par la moyenne de la colonne (qtt)"))),
+              ),
+              
               div(h2("Exploration des données"), style="margin-left:1%; margin-bottom:3%;"),
               
               fluidRow(
@@ -112,8 +118,47 @@ ui <- dashboardPage(
                        ),
                        box(width = NULL, plotOutput("repartitionClassVar"))
                 )
-              )
+              ),
               
+              fluidRow(
+                column(title = "Distribution de l'attribut selon les classes", width = 12,
+                       selectInput("boxRepart", label="Répartition de la variable", choices=c("-")),
+                       box(width = NULL, plotOutput("boxPlotRepart"))
+                )
+              ),
+              fluidRow(
+                column(title = "Coefficient de Pearson", width = 6,
+                       selectInput("corrContVar", label="Coefficients de corrélation entre variables quantitatives", choices=c("-"), multiple=TRUE),
+                       box(width = NULL, plotOutput("corrContPlotVar"))
+                ),
+                column(title = "V de Cramer (Qualitatives) / Test ANOVA (Mixtes)", width = 6,
+                       selectInput("corrMixVar", label="Test statistique sur variables qualitatives ou mixtes", choices=c("-"), multiple=TRUE),
+                       box(width = NULL, plotOutput("corrMixPlotVar"))
+                )
+              ),
+              
+              div(h2("Réduction de la dimensionnalité"), style="margin-left:1%; margin-bottom:3%;"),
+              
+              fluidRow(
+                column(width = 6, selectInput("pcaVars", label="Variables à exclure (ACP)", choices=c(), multiple=TRUE)),
+                column(width = 6, selectInput("pcaSupp", label="Variables supplémentaires", choices=c(), multiple=TRUE))
+              ),
+              
+              fluidRow(
+                column(width = 6, selectInput("cp1", label="Première composante principale", choices=c())),
+                column(width = 6, selectInput("cp2", label="Seconde composante principale", choices=c()))
+              ),
+              
+              fluidRow(
+                column(title = "Cercle de corrélation", width = 6, box(width = NULL, plotOutput("pcaVarPlot"))),
+                column(title = "Représentation des individus", width = 6, box(width = NULL, plotOutput("pcaIndPlot")))
+              ),
+              
+              fluidRow(
+                column(title = "Contributions et qualité de représentation", width = 12, 
+                       box(height=550, width = NULL, class="unique", DT::dataTableOutput("tableACP")))
+              ),
+      
       ),
       
       # Classification par arbre de décision
@@ -131,7 +176,7 @@ ui <- dashboardPage(
               
       ),
       
-      # Échantillonage
+      # ?chantillonage
       tabItem(tabName = "sampling"
               
       )
