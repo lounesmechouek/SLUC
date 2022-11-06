@@ -15,6 +15,10 @@ if (!require(DescTools)) install.packages("DescTools")
 if (!require(FactoMineR)) install.packages("FactoMineR")
 if(!require(devtools)) install.packages("devtools")
 if(!require(imputeTS)) install.packages("imputeTS")
+if(!require(caTools)) install.packages("caTools") 
+if(!require(rpart)) install.packages("rpart")
+if(!require(caret)) install.packages("caret")
+
 
 library(shinydashboard)
 library(shiny)
@@ -27,6 +31,9 @@ library(FactoMineR)
 library(devtools)
 library("factoextra")
 library(imputeTS)
+library(caTools)
+library(rpart)
+library(caret)
 
 devtools::install_github("kassambara/factoextra")
 

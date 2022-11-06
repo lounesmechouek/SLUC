@@ -162,18 +162,102 @@ ui <- dashboardPage(
       ),
       
       # Classification par arbre de décision
-      tabItem(tabName = "decision-tree"
-              
+      tabItem(tabName = "decision-tree",
+          div(h2("Paramètres par défaut"), style="margin-left:2%;"),
+          fluidRow(
+            column(title = "Variables à exclure", width = 6, selectInput("dtVars", label="Variables à exclure (DT)", choices=c(), multiple=TRUE))
+          ),
+          fluidRow(
+            column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracyDT"), align="center")),
+            column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionDT"), align="center")),
+            column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallDT"), align="center")),
+            column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1DT"), align="center"))
+          ),
+          fluidRow(
+            column(title = "Arbre", width = 6, box(width = NULL, plotOutput("plotDT"))),
+            column(title = "Courbe AUC", width = 6, box(width = NULL, plotOutput("aucDT")))
+          ),
+          
+          div(h2("Grid Search"), style="margin-left:2%;"),
+          fluidRow(
+            column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracyDTGS"), align="center")),
+            column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionDTGS"), align="center")),
+            column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallDTGS"), align="center")),
+            column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1DTGS"), align="center"))
+          ),
+          fluidRow(
+            column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucDTGS"))),
+          )
       ),
       
       # Classification par LR
-      tabItem(tabName = "logistic-regression"
-              
+      tabItem(tabName = "logistic-regression",
+        div(h2("Paramètres par défaut"), style="margin-left:2%;"),
+        fluidRow(
+          column(title = "Variables à exclure", width = 6, selectInput("lrVars", label="Variables à exclure (LR)", choices=c(), multiple=TRUE))
+        ),
+        fluidRow(
+          column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracyLR"), align="center")),
+          column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionLR"), align="center")),
+          column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallLR"), align="center")),
+          column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1LR"), align="center"))
+        ),
+        fluidRow(
+          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucLR"))),
+        ),
+        
+        div(h2("Grid Search"), style="margin-left:2%;"),
+        fluidRow(
+          column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracyLRGS"), align="center")),
+          column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionLRGS"), align="center")),
+          column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallLRGS"), align="center")),
+          column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1LRGS"), align="center"))
+        ),
+        fluidRow(
+          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucLRGS"))),
+        )     
       ),
       
       # Classification par SVM
-      tabItem(tabName = "svm"
-              
+      tabItem(tabName = "svm",
+        div(h2("Paramètres par défaut"), style="margin-left:2%;"),
+        fluidRow(
+          column(title = "Variables à exclure", width = 6, selectInput("svmVars", label="Variables à exclure (SVM)", choices=c(), multiple=TRUE))
+        ),
+        
+        div(h3("Sans kernel"), style="margin-left:2%;"),
+        fluidRow(
+          column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracySVM"), align="center")),
+          column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionSVM"), align="center")),
+          column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallSVM"), align="center")),
+          column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1SVM"), align="center"))
+        ),
+        fluidRow(
+          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucSVM"))),
+        ),
+        
+        
+        div(h3("Avec kernel (sigmoid)"), style="margin-left:2%;"),
+        fluidRow(
+          column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracySVMK"), align="center")),
+          column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionSVMK"), align="center")),
+          column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallSVMK"), align="center")),
+          column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1SVMK"), align="center"))
+        ),
+        fluidRow(
+          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucSVMK"))),
+        ),
+        
+        div(h2("Grid Search"), style="margin-left:2%;"),
+        fluidRow(
+          column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracySVMGS"), align="center")),
+          column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionSVMGS"), align="center")),
+          column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallSVMGS"), align="center")),
+          column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1SVMGS"), align="center"))
+        ),
+        fluidRow(
+          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucSVMGS"))),
+        )    
       ),
       
       # ?chantillonage
