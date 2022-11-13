@@ -12,6 +12,10 @@ library(imputeTS)
 library(caTools)
 library(rpart)
 library(caret)
+library(partykit)
+library(nnet)
+library(e1071)
+library(pROC)
 
 ################################################
 #                 Fonctions                    #
@@ -140,11 +144,8 @@ server <- function(input, output) {
     updateSelectInput(inputId = "svmVars", choices = c(nms))
     updateSelectInput(inputId = "lrVars", choices = c(nms))
     updateSelectInput(inputId = "dtVars", choices = c(nms))
-    
-    dtRes()
   })
   
-
   observeEvent(outcomeVar(), {
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     df <- cleanData()
@@ -196,7 +197,7 @@ server <- function(input, output) {
   cleanData <- reactive({
     df <- data()
     
-    if(naPolicy() == "SupprimerexdVars() les individus"){
+    if(naPolicy() == "Supprimer les individus"){
       df1 <- na.omit(df)
     }
     else if(naPolicy() == "Remplacer par la moyenne de la colonne"){
@@ -211,24 +212,25 @@ server <- function(input, output) {
       df2 <- df1
     }
     
-    nms <- colnames(df2)
+    return(df2)
+  })
+  
+  observeEvent(exdVars(),{
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     choix <- c("-")
+    nms <- colnames(cleanData())
+    
     updateSelectInput(inputId = "outcomeVariable", choices = c(choix, nms))
     updateSelectInput(inputId = "boxRepart", choices = c(choix, nms))
     updateSelectInput(inputId = "corrContVar", choices = c(nms[!(nms %in% getQualitatives(df))]))
     updateSelectInput(inputId = "corrMixVar", choices = c(nms))
     updateSelectInput(inputId = "pcaVars", choices = c(nms[!(nms %in% getQualitatives(df))]))
     updateSelectInput(inputId = "cp1", choices = c(1:length(nms)))
-    updateSelectInput(inputId = "excludedVars", choices = c(nms))
     
     updateSelectInput(inputId = "svmVars", choices = c(nms))
     updateSelectInput(inputId = "lrVars", choices = c(nms))
     updateSelectInput(inputId = "dtVars", choices = c(nms))
-    
-    return(df2)
   })
-  
-  
   
   # Statistiques gÃ©nÃ©rales
   output$statDimVar <- renderInfoBox({
@@ -582,7 +584,6 @@ server <- function(input, output) {
     }
   })
   
-  
   numCP1 <- reactive({
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     
@@ -629,7 +630,6 @@ server <- function(input, output) {
       fviz_pca_ind(pcaRes(), axes = c(strtoi(numCP1()), strtoi(numCP2()))) + labs(title ="Répartition des individus", x = paste0("PC", strtoi(numCP1())), y = paste0("PC",  strtoi(numCP2())))
     }
   })
-  
   
   output$tableACP <- DT::renderDT({
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
@@ -684,110 +684,557 @@ server <- function(input, output) {
     return(input$dtVars)
   })
   
+  observeEvent(dtExcVars(), {
+    dtRes()
+  })
+  
   dtRes <- reactive({
     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
     validate(need(!is.null(outcomeVar()) & outcomeVar()!='-' , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
     
     df <- splitData()
     
-    train <- df[1]
-    test <- df[2]
+    train1 <- (df[1])[[1]]
+    train <- na.omit(train1)
+    
+    test1 <- (df[2])[[1]]
+    test <- na.omit(test1)
     
     if(!is.null(dtExcVars())){
       train <- train[, !(names(train) %in% c(dtExcVars()))]
       test <- test[, !(names(test) %in% c(dtExcVars()))]
     }
     
-    str(train)
-  
     train[sapply(train, is.character)] <- lapply(train[sapply(train, is.character)], as.factor)
     test[sapply(test, is.character)] <- lapply(test[sapply(test, is.character)], as.factor)
     
-    # ERROR HERE
-    model <- ctree(outcomeVar() ~ ., data = train)
-    print("OK")
+    Lg1 <- length(unique(train[, outcomeVar()]))
+    Lg2 <-length(unique(test[, outcomeVar()]))
+    train[, outcomeVar()] <- factor(train[,outcomeVar()])
+    levels(train[, outcomeVar()]) <- c(1:Lg1)
+    test[, outcomeVar()] <- factor(test[,outcomeVar()])
+    levels(test[, outcomeVar()]) <- c(1:Lg2)
+    
+    model <- rpart(train[, outcomeVar()]~., data = train)
     
     resTest <- predict(model, test, type="class")
-    result <- confusionMatrix(test[, ov], resTest)
+    result <- confusionMatrix(test[, outcomeVar()], resTest)
     
+    #print(result)
+    #plot(model)
     
-    print(result)
-    plot(model)
-    
-    return(list(model, resTest, result))
+    return(list(model, resTest, result, test[, outcomeVar()]))
   })
   
+  output$accuracyDT <- renderInfoBox({
+     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+     validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+     resDT <- dtRes()
+     res <- resDT[[3]]
+     
+     acc <- res$overall['Accuracy']
+     
+     infoBox("", paste0(acc*100, "%"),  
+             color = "light-blue",
+             icon = icon("check-circle")
+     )
+ })
   
-  # output$accuracyDT <- renderInfoBox({
-  #   validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
-  #   validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
-  #   
-  #   resDT <- dtRes()
-  #   res <- resDT[3]
-  #   
-  #   acc <- res$overall['Accuracy']
-  #   
-  #   infoBox("", acc,  
-  #           color = "light-blue",
-  #           icon = icon("check-circle")
-  #   )
-  # })
-  # 
-  # output$precisionDT <- renderInfoBox({
-  #   validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
-  #   validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
-  #   
-  #   resDT <- dtRes()
-  #   res <- resDT[3]
-  #   
-  #   precision <- res$byClass['Pos Pred Value']
-  #   
-  #   infoBox("", precision,  
-  #           color = "light-blue",
-  #           icon = icon("check-circle")
-  #   )
-  #   
-  # })
-  # 
-  # output$recallDT <- renderInfoBox({
-  #   validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
-  #   validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
-  #   
-  #   resDT <- dtRes()
-  #   res <- resDT[3]
-  #   
-  #   recall <- res$byClass['Sensitivity']
-  #   
-  #   infoBox("", recall,  
-  #           color = "light-blue",
-  #           icon = icon("check-circle")
-  #   )
-  # })
-  # 
-  # output$f1DT <- renderPlot({
-  #   validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
-  #   validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
-  #   
-  #   resDT <- dtRes()
-  #   res <- resDT[3]
-  #   
-  #   f1 <- res$ByClass['F1']
-  #   
-  #   infoBox("", f1,  
-  #           color = "light-blue",
-  #           icon = icon("check-circle")
-  #   )
-  # })
-  # 
-  # # Logistic Regression
-  # lrExcVars <- reactive({
-  #   validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
-  #   return(input$lrVars)
-  # })
-  # 
+  output$precisionDT <- renderInfoBox({
+     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+     validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+     
+     df <- cleanData()
+     
+     resDT <- dtRes()
+     res <- resDT[[3]]
+     
+     if(length(unique(df[,outcomeVar()])) > 2){
+       precision <- mean(res$byClass[,'Precision'])
+     } else {
+       precision <- res$byClass['Precision']
+     }
+
+     infoBox("", paste0(precision*100, "%"),  
+             color = "light-blue",
+             icon = icon("check-circle")
+     )
+ })
+   
+  output$recallDT <- renderInfoBox({
+     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+     validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+     
+     df <- cleanData()
+     
+     resDT <- dtRes()
+     res <- resDT[[3]]
+     
+     if(length(unique(df[,outcomeVar()])) > 2){
+       recall <- mean(res$byClass[,'Recall'])
+     } else {
+       recall <- res$byClass['Recall']
+     }
+     
+     infoBox("", paste0(recall*100, "%"),  
+             color = "light-blue",
+             icon = icon("check-circle")
+     )
+  })
+   
+  output$f1DT <- renderInfoBox({
+     validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+     validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+     
+     df <- cleanData()
+     
+     resDT <- dtRes()
+     res <- resDT[[3]]
+     
+     if(length(unique(df[,outcomeVar()])) > 2){
+       f1 <- mean(res$byClass[,'F1'])
+     } else {
+       f1 <- res$byClass['F1']
+     }
+   
+     infoBox("", paste0(f1*100, "%"),  
+             color = "light-blue",
+             icon = icon("check-circle")
+     )
+  })
+  
+  output$plotDT <- renderPlot({
+    plot(dtRes()[[1]])
+    text(dtRes()[[1]], cex = 0.8, use.n = TRUE, xpd = TRUE)
+  })
+  
+  output$aucDT <- renderPlot({
+    res <- dtRes()
+    #print(res[[4]])
+    #print("##############")
+    #print(res[[2]])
+    multiclass.roc(as.numeric(res[[4]]), 
+                   as.numeric(res[[2]]), 
+                   plot=TRUE, 
+                   legacy.axes=TRUE, 
+                   percent=TRUE,
+                   xlab="Pourcentage de faux positifs",
+                   ylab="Pourcentage de vrais positifs"
+                  )
+    })
+ 
+  # Logistic Regression
+  lrExcVars <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    return(input$lrVars)
+  })
+  
+  observeEvent(lrExcVars(), {
+    lrRes()
+  })
+  
+  lrRes <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) & outcomeVar()!='-' , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- splitData()
+    
+    train1 <- (df[1])[[1]]
+    train <- na.omit(train1)
+    
+    test1 <- (df[2])[[1]]
+    test <- na.omit(test1)
+    
+    if(!is.null(lrExcVars())){
+      train <- train[, !(names(train) %in% c(lrExcVars()))]
+      test <- test[, !(names(test) %in% c(lrExcVars()))]
+    }
+    
+    train[sapply(train, is.character)] <- lapply(train[sapply(train, is.character)], as.factor)
+    test[sapply(test, is.character)] <- lapply(test[sapply(test, is.character)], as.factor)
+    
+    Lg1 <- length(unique(train[, outcomeVar()]))
+    Lg2 <-length(unique(test[, outcomeVar()]))
+    train[, outcomeVar()] <- factor(train[,outcomeVar()])
+    levels(train[, outcomeVar()]) <- c(1:Lg1)
+    test[, outcomeVar()] <- factor(test[,outcomeVar()])
+    levels(test[, outcomeVar()]) <- c(1:Lg2)
+    
+    #model <- glm(train[, outcomeVar()]~., data = train, family = "binomial")
+    model <- multinom(train[, outcomeVar()]~., data = train)
+    
+    resTest <- predict(model, test, type="class")
+    # print(resTest)
+    # print("############")
+    # print(test[, outcomeVar()])
+    result <- confusionMatrix(test[, outcomeVar()], resTest)
+    
+    return(list(model, resTest, result, test[, outcomeVar()]))
+  })
+  
+  output$accuracyLR <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    resLR <- lrRes()
+    res <- resLR[[3]]
+    
+    acc <- res$overall['Accuracy']
+    
+    infoBox("", paste0(acc*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$precisionLR <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resLR <- lrRes()
+    res <- resLR[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      precision <- mean(res$byClass[,'Precision'])
+    } else {
+      precision <- res$byClass['Precision']
+    }
+    
+    infoBox("", paste0(precision*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$recallLR <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resLR <- lrRes()
+    res <- resLR[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      recall <- mean(res$byClass[,'Recall'])
+    } else {
+      recall <- res$byClass['Recall']
+    }
+    
+    infoBox("", paste0(recall*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$f1LR <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resLR <- lrRes()
+    res <- resLR[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      f1 <- mean(res$byClass[,'F1'])
+    } else {
+      f1 <- res$byClass['F1']
+    }
+    
+    infoBox("", paste0(f1*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$aucLR <- renderPlot({
+    res <- lrRes()
+    #print(res[[4]])
+    #print("##############")
+    #print(res[[2]])
+    multiclass.roc(as.numeric(res[[4]]), 
+                   as.numeric(res[[2]]), 
+                   plot=TRUE, 
+                   legacy.axes=TRUE, 
+                   percent=TRUE,
+                   xlab="Pourcentage de faux positifs",
+                   ylab="Pourcentage de vrais positifs"
+    )
+  })
+   
   # # SVM
-  # svmExcVars <- reactive({
-  #   validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
-  #   return(input$svmVars)
-  # })
+  svmExcVars <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    return(input$svmVars)
+  })
+  
+  observeEvent(svmExcVars(), {
+    svmRes()
+  })
+  
+  svmRes <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) & outcomeVar()!='-' , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- splitData()
+    
+    train1 <- (df[1])[[1]]
+    train <- na.omit(train1)
+    
+    test1 <- (df[2])[[1]]
+    test <- na.omit(test1)
+    
+    if(!is.null(svmExcVars())){
+      train <- train[, !(names(train) %in% c(svmExcVars()))]
+      test <- test[, !(names(test) %in% c(svmExcVars()))]
+    }
+    
+    train[sapply(train, is.character)] <- lapply(train[sapply(train, is.character)], as.factor)
+    test[sapply(test, is.character)] <- lapply(test[sapply(test, is.character)], as.factor)
+    
+    Lg1 <- length(unique(train[, outcomeVar()]))
+    Lg2 <-length(unique(test[, outcomeVar()]))
+    train[, outcomeVar()] <- factor(train[,outcomeVar()])
+    levels(train[, outcomeVar()]) <- c(1:Lg1)
+    test[, outcomeVar()] <- factor(test[,outcomeVar()])
+    levels(test[, outcomeVar()]) <- c(1:Lg2)
+    
+    model <- svm(train[, outcomeVar()]~., data = train, type = 'C-classification', kernel = 'linear')
+    
+    resTest <- predict(model, test, type="response")
+    # print(resTest)
+    # print("############")
+    # print(test[, outcomeVar()])
+    result <- confusionMatrix(test[, outcomeVar()], resTest)
+    
+    return(list(model, resTest, result, test[, outcomeVar()]))
+  })
+  
+  output$accuracySVM <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    resSVM <- svmRes()
+    res <- resSVM[[3]]
+    
+    acc <- res$overall['Accuracy']
+    
+    infoBox("", paste0(acc*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$precisionSVM <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resSVM <- svmRes()
+    res <- resSVM[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      precision <- mean(res$byClass[,'Precision'])
+    } else {
+      precision <- res$byClass['Precision']
+    }
+    
+    infoBox("", paste0(precision*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$recallSVM <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resSVM <- svmRes()
+    res <- resSVM[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      recall <- mean(res$byClass[,'Recall'])
+    } else {
+      recall <- res$byClass['Recall']
+    }
+    
+    infoBox("", paste0(recall*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$f1SVM <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resSVM <- svmRes()
+    res <- resSVM[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      f1 <- mean(res$byClass[,'F1'])
+    } else {
+      f1 <- res$byClass['F1']
+    }
+    
+    infoBox("", paste0(f1*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$aucSVM <- renderPlot({
+    res <- svmRes()
+    #print(res[[4]])
+    #print("##############")
+    #print(res[[2]])
+    multiclass.roc(as.numeric(res[[4]]), 
+                   as.numeric(res[[2]]), 
+                   plot=TRUE, 
+                   legacy.axes=TRUE, 
+                   percent=TRUE,
+                   xlab="Pourcentage de faux positifs",
+                   ylab="Pourcentage de vrais positifs"
+    )
+  })
+  
+  svmKRes <- reactive({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) & outcomeVar()!='-' , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- splitData()
+    
+    train1 <- (df[1])[[1]]
+    train <- na.omit(train1)
+    
+    test1 <- (df[2])[[1]]
+    test <- na.omit(test1)
+    
+    if(!is.null(svmExcVars())){
+      train <- train[, !(names(train) %in% c(svmExcVars()))]
+      test <- test[, !(names(test) %in% c(svmExcVars()))]
+    }
+    
+    train[sapply(train, is.character)] <- lapply(train[sapply(train, is.character)], as.factor)
+    test[sapply(test, is.character)] <- lapply(test[sapply(test, is.character)], as.factor)
+    
+    Lg1 <- length(unique(train[, outcomeVar()]))
+    Lg2 <-length(unique(test[, outcomeVar()]))
+    train[, outcomeVar()] <- factor(train[,outcomeVar()])
+    levels(train[, outcomeVar()]) <- c(1:Lg1)
+    test[, outcomeVar()] <- factor(test[,outcomeVar()])
+    levels(test[, outcomeVar()]) <- c(1:Lg2)
+    
+    model <- svm(train[, outcomeVar()]~., data = train, type = 'C-classification', kernel = 'radial')
+    
+    resTest <- predict(model, test, type="response")
+    # print(resTest)
+    # print("############")
+    # print(test[, outcomeVar()])
+    result <- confusionMatrix(test[, outcomeVar()], resTest)
+    
+    return(list(model, resTest, result, test[, outcomeVar()]))
+  })
+  
+  output$accuracySVMK <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    resSVMK <- svmKRes()
+    res <- resSVMK[[3]]
+    
+    acc <- res$overall['Accuracy']
+    
+    infoBox("", paste0(acc*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$precisionSVMK <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resSVMK <- svmKRes()
+    res <- resSVMK[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      precision <- mean(res$byClass[,'Precision'])
+    } else {
+      precision <- res$byClass['Precision']
+    }
+    
+    infoBox("", paste0(precision*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$recallSVMK <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resSVMK <- svmKRes()
+    res <- resSVMK[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      recall <- mean(res$byClass[,'Recall'])
+    } else {
+      recall <- res$byClass['Recall']
+    }
+    
+    infoBox("", paste0(recall*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$f1SVMK <- renderInfoBox({
+    validate(need(!is.null(cleanData()) , "Veuillez sélectionner un dataset valide"))
+    validate(need(!is.null(outcomeVar()) , "Veuillez sélectionner une variable de sortie dans l'onglet 'Exploration'"))
+    
+    df <- cleanData()
+    
+    resSVMK <- svmKRes()
+    res <- resSVMK[[3]]
+    
+    if(length(unique(df[,outcomeVar()])) > 2){
+      f1 <- mean(res$byClass[,'F1'])
+    } else {
+      f1 <- res$byClass['F1']
+    }
+    
+    infoBox("", paste0(f1*100, "%"),  
+            color = "light-blue",
+            icon = icon("check-circle")
+    )
+  })
+  
+  output$aucSVMK <- renderPlot({
+    res <- svmKRes()
+    #print(res[[4]])
+    #print("##############")
+    #print(res[[2]])
+    multiclass.roc(as.numeric(res[[4]]), 
+                   as.numeric(res[[2]]), 
+                   plot=TRUE, 
+                   legacy.axes=TRUE, 
+                   percent=TRUE,
+                   xlab="Pourcentage de faux positifs",
+                   ylab="Pourcentage de vrais positifs"
+    )
+  })
 }

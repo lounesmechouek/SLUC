@@ -18,8 +18,11 @@ if(!require(imputeTS)) install.packages("imputeTS")
 if(!require(caTools)) install.packages("caTools") 
 if(!require(rpart)) install.packages("rpart")
 if(!require(caret)) install.packages("caret")
-
-
+if(!require(partykit)) install.packages("partykit")
+if(!require(nnet)) install.packages("nnet")
+if(!require(e1071)) install.packages('e1071')
+if(!require(pROC)) install.packages('pROC')
+ 
 library(shinydashboard)
 library(shiny)
 library(dplyr)
@@ -34,6 +37,10 @@ library(imputeTS)
 library(caTools)
 library(rpart)
 library(caret)
+library(partykit)
+library(nnet)
+library(e1071)
+library(pROC)
 
 devtools::install_github("kassambara/factoextra")
 

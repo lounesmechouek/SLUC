@@ -175,7 +175,7 @@ ui <- dashboardPage(
           ),
           fluidRow(
             column(title = "Arbre", width = 6, box(width = NULL, plotOutput("plotDT"))),
-            column(title = "Courbe AUC", width = 6, box(width = NULL, plotOutput("aucDT")))
+            column(title = "Courbe ROC", width = 6, box(width = NULL, plotOutput("aucDT")))
           ),
           
           div(h2("Grid Search"), style="margin-left:2%;"),
@@ -186,7 +186,7 @@ ui <- dashboardPage(
             column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1DTGS"), align="center"))
           ),
           fluidRow(
-            column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucDTGS"))),
+            column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucDTGS"))),
           )
       ),
       
@@ -203,7 +203,7 @@ ui <- dashboardPage(
           column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1LR"), align="center"))
         ),
         fluidRow(
-          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucLR"))),
+          column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucLR"))),
         ),
         
         div(h2("Grid Search"), style="margin-left:2%;"),
@@ -214,7 +214,7 @@ ui <- dashboardPage(
           column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1LRGS"), align="center"))
         ),
         fluidRow(
-          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucLRGS"))),
+          column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucLRGS"))),
         )     
       ),
       
@@ -233,11 +233,11 @@ ui <- dashboardPage(
           column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1SVM"), align="center"))
         ),
         fluidRow(
-          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucSVM"))),
+          column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucSVM"))),
         ),
         
         
-        div(h3("Avec kernel (sigmoid)"), style="margin-left:2%;"),
+        div(h3("Avec kernel (radial)"), style="margin-left:2%;"),
         fluidRow(
           column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracySVMK"), align="center")),
           column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionSVMK"), align="center")),
@@ -245,7 +245,7 @@ ui <- dashboardPage(
           column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1SVMK"), align="center"))
         ),
         fluidRow(
-          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucSVMK"))),
+          column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucSVMK"))),
         ),
         
         div(h2("Grid Search"), style="margin-left:2%;"),
@@ -256,7 +256,7 @@ ui <- dashboardPage(
           column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1SVMGS"), align="center"))
         ),
         fluidRow(
-          column(title = "Courbe AUC", width = 12, box(width = NULL, plotOutput("aucSVMGS"))),
+          column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucSVMGS"))),
         )    
       ),
       
