@@ -178,7 +178,10 @@ ui <- dashboardPage(
             column(title = "Courbe ROC", width = 6, box(width = NULL, plotOutput("aucDT")))
           ),
           
-          div(h2("Grid Search"), style="margin-left:2%;"),
+          fluidRow(
+            column(width = 6, div(h2("Grid Search"), style="margin-left:2%;")),
+            column(width = 6, infoBoxOutput("dtParam"))
+          ),
           fluidRow(
             column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracyDTGS"), align="center")),
             column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionDTGS"), align="center")),
@@ -205,8 +208,10 @@ ui <- dashboardPage(
         fluidRow(
           column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucLR"))),
         ),
-        
-        div(h2("Grid Search"), style="margin-left:2%;"),
+        fluidRow(
+          column(width = 6, div(h2("Grid Search"), style="margin-left:2%;")),
+          column(width = 6, infoBoxOutput("lrParam"))
+        ),
         fluidRow(
           column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracyLRGS"), align="center")),
           column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionLRGS"), align="center")),
@@ -250,6 +255,10 @@ ui <- dashboardPage(
         
         div(h2("Grid Search"), style="margin-left:2%;"),
         fluidRow(
+          column(width = 6, div(h3("Sans kernel"), style="margin-left:2%;")),
+          column(width = 6, infoBoxOutput("svmParam"))
+        ),
+        fluidRow(
           column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracySVMGS"), align="center")),
           column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionSVMGS"), align="center")),
           column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallSVMGS"), align="center")),
@@ -257,12 +266,28 @@ ui <- dashboardPage(
         ),
         fluidRow(
           column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucSVMGS"))),
-        )    
+        ),
+        
+        fluidRow(
+          column(width = 6, div(h3("Avec kernel (Radial)"), style="margin-left:2%;")),
+          column(width = 6, infoBoxOutput("svmKParam"))
+        ),
+        fluidRow(
+          column(width = 3, box(title = "Accuracy", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("accuracySVMKGS"), align="center")),
+          column(width = 3, box(title = "Precision", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("precisionSVMKGS"), align="center")),
+          column(width = 3, box(title = "Recall", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("recallSVMKGS"), align="center")),
+          column(width = 3, box(title = "F-measure", width = NULL, solidHeader = TRUE, status = "primary", infoBoxOutput("f1SVMKGS"), align="center"))
+        ),
+        fluidRow(
+          column(title = "Courbe ROC", width = 12, box(width = NULL, plotOutput("aucSVMKGS"))),
+        ),
       ),
       
-      # ?chantillonage
-      tabItem(tabName = "sampling"
-              
+      # Echantillonage
+      tabItem(tabName = "sampling",
+          fluidRow(
+            column(width = 12, box(width = NULL, selectInput("samplMethod", label="Veuillez choisir la méthode de sampling à appliquer...", choices=c("", "Undersampling", "Oversampling")))),
+          )    
       )
       
     )
